@@ -630,7 +630,7 @@ async function runCompletion(){
       url=P.ep+"/models/"+encodeURIComponent(model)+":streamGenerateContent?alt=sse";
       headers["x-goog-api-key"]=key;
       body={
-        contents: messages.map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]})),
+        contents: messages.filter(m=>m.content&&m.content.trim()).map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]})),
         generationConfig:{ temperature: cfg.temp }
       };
       if(sysText.trim()) body.systemInstruction={parts:[{text:sysText.trim()}]};
@@ -648,7 +648,9 @@ async function runCompletion(){
         ...(prov==="cloudflare"?{max_tokens:2048}:{}),
         messages:[
           ...(sysText.trim()?[{role:"system",content:sysText.trim()}]:[]),
-          ...messages.map(m=>({role:m.role,content:m.content}))
+          // filter: a stopped/errored turn can leave an empty assistant message in
+          // history — providers (Cohere via OpenRouter) 400 on empty content.
+          ...messages.filter(m=>m.content&&m.content.trim()).map(m=>({role:m.role,content:m.content}))
         ]
       };
     }
