@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Aurora · AI Chat</title>
+<style>
+  :root{
+    --bg:#0a0b14; --bg2:#0f1120;
+    --panel:rgba(22,24,42,.55); --panel-solid:#161a2e;
+    --stroke:rgba(255,255,255,.09);
+    --text:#e9ecff; --muted:#98a0c7; --faint:#6b7299;
+    --user:linear-gradient(135deg,#7c5cff,#4aa8ff);
+    --accent:#8b7bff; --accent2:#4ad6ff;
+    --ok:#43e0a0; --warn:#ffb454; --err:#ff6b7d;
+    --radius:20px; --shadow:0 20px 60px rgba(0,0,0,.45);
+    --font:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  html[data-theme="light"]{
+    --bg:#eef1fb; --bg2:#e5e9f7;
+    --panel:rgba(255,255,255,.6); --panel-solid:#ffffff;
+    --stroke:rgba(20,24,60,.1);
+    --text:#141833; --muted:#5b6390; --faint:#8890b8;
+    --shadow:0 20px 50px rgba(60,70,120,.18);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;font-family:var(--font);color:var(--text);
+    background:var(--bg);overflow:hidden;
+    -webkit-font-smoothing:antialiased;transition:background .4s;
+  }
+  /* ---------- animated aurora background ---------- */
+  .aurora{position:fixed;inset:0;z-index:-2;overflow:hidden;background:
+    radial-gradient(1200px 800px at 10% -10%, #1a1d3a 0%, transparent 60%),
+    radial-gradient(1000px 700px at 100% 0%, #14243a 0%, transparent 55%),
+    var(--bg);transition:background .4s;}
+  html[data-theme="light"] .aurora{background:
+    radial-gradient(1200px 800px at 10% -10%, #dfe6ff 0%, transparent 60%),
+    radial-gradient(1000px 700px at 100% 0%, #d8ecff 0%, transparent 55%),
+    var(--bg);}
+  .blob{position:absolute;border-radius:50%;filter:blur(70px);opacity:.55;
+    mix-blend-mode:screen;animation:float 22s ease-in-out infinite;}
+  html[data-theme="light"] .blob{mix-blend-mode:multiply;opacity:.4}
+  .b1{width:46vmax;height:46vmax;left:-10vmax;top:-8vmax;background:radial-gradient(circle,#7c5cff,transparent 70%)}
+  .b2{width:40vmax;height:40vmax;right:-12vmax;top:6vmax;background:radial-gradient(circle,#20c6ff,transparent 70%);animation-delay:-7s}
+  .b3{width:38vmax;height:38vmax;left:26vmax;bottom:-16vmax;background:radial-gradient(circle,#ff5ca8,transparent 70%);animation-delay:-13s}
+  @keyframes float{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(6vmax,4vmax) scale(1.08)}66%{transform:translate(-5vmax,-3vmax) scale(.95)}}
+  @media (prefers-reduced-motion:reduce){.blob{animation:none}}
+
+  /* ---------- layout ---------- */
+  .app{height:100dvh;display:flex;flex-direction:column;max-width:900px;margin:0 auto;padding:0 16px}
+  header{display:flex;align-items:center;gap:12px;padding:16px 6px 12px}
+  .logo{width:38px;height:38px;border-radius:12px;background:conic-gradient(from 140deg,#7c5cff,#4ad6ff,#ff5ca8,#7c5cff);
+    box-shadow:0 6px 20px rgba(124,92,255,.5);position:relative;flex:none;animation:spin 12s linear infinite}
+  .logo::after{content:"";position:absolute;inset:4px;border-radius:9px;background:var(--panel-solid)}
+  .logo::before{content:"✦";position:absolute;inset:0;display:grid;place-items:center;z-index:1;font-size:16px;
+    background:linear-gradient(135deg,#a78bff,#4ad6ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .brand{display:flex;flex-direction:column;line-height:1.15}
+  .brand h1{margin:0;font-size:18px;font-weight:700;letter-spacing:.2px;
+    background:linear-gradient(135deg,var(--text),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .brand .sub{font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok);animation:pulse 2s infinite}
+  @keyframes pulse{50%{opacity:.35}}
+  .spacer{flex:1}
+  .iconbtn{width:38px;height:38px;border-radius:12px;border:1px solid var(--stroke);background:var(--panel);
+    color:var(--text);cursor:pointer;display:grid;place-items:center;backdrop-filter:blur(12px);
+    transition:.2s;font-size:16px}
+  .iconbtn:hover{transform:translateY(-2px);border-color:var(--accent);box-shadow:0 6px 18px rgba(124,92,255,.3)}
+  .iconbtn:active{transform:translateY(0)}
+
+  /* ---------- messages ---------- */
+  .stream{flex:1;overflow-y:auto;padding:8px 4px 8px;scroll-behavior:smooth}
+  .stream::-webkit-scrollbar{width:9px}
+  .stream::-webkit-scrollbar-thumb{background:var(--stroke);border-radius:9px}
+  .stream::-webkit-scrollbar-thumb:hover{background:var(--faint)}
+
+  .msg{display:flex;gap:12px;margin:18px 2px;animation:rise .45s cubic-bezier(.2,.7,.2,1)}
+  @keyframes rise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+  .msg .av{width:34px;height:34px;border-radius:11px;flex:none;display:grid;place-items:center;font-size:16px;
+    border:1px solid var(--stroke)}
+  .msg.user{flex-direction:row-reverse}
+  .msg.user .av{background:var(--user);color:#fff;border:none}
+  .msg.ai .av{background:var(--panel);backdrop-filter:blur(12px)}
+  .bubble{max-width:min(78%,680px);border-radius:var(--radius);padding:13px 16px;line-height:1.6;font-size:15px;
+    border:1px solid var(--stroke);position:relative;word-wrap:break-word;overflow-wrap:anywhere}
+  .msg.user .bubble{background:var(--user);color:#fff;border:none;border-top-right-radius:6px;box-shadow:0 8px 24px rgba(90,90,255,.3)}
+  .msg.ai .bubble{background:var(--panel);backdrop-filter:blur(14px);border-top-left-radius:6px}
+
+  /* markdown */
+  .bubble p{margin:.5em 0}.bubble p:first-child{margin-top:0}.bubble p:last-child{margin-bottom:0}
+  .bubble h1,.bubble h2,.bubble h3,.bubble h4{margin:.7em 0 .4em;line-height:1.25}
+  .bubble h1{font-size:1.35em}.bubble h2{font-size:1.2em}.bubble h3{font-size:1.08em}
+  .bubble ul,.bubble ol{margin:.4em 0;padding-left:1.4em}
+  .bubble li{margin:.2em 0}
+  .bubble a{color:var(--accent2);text-decoration:none;border-bottom:1px solid transparent}
+  .bubble a:hover{border-color:var(--accent2)}
+  .bubble code{font-family:var(--mono);font-size:.88em;background:rgba(130,140,200,.18);padding:.12em .4em;border-radius:6px}
+  .bubble blockquote{margin:.5em 0;padding:.3em .9em;border-left:3px solid var(--accent);color:var(--muted);background:rgba(130,140,200,.08);border-radius:6px}
+  .bubble hr{border:none;border-top:1px solid var(--stroke);margin:.8em 0}
+  .codewrap{position:relative;margin:.6em 0}
+  .codewrap pre{margin:0;background:#0c0e1c;border:1px solid var(--stroke);border-radius:12px;padding:14px 14px;overflow-x:auto}
+  html[data-theme="light"] .codewrap pre{background:#151a30}
+  .codewrap pre code{background:none;padding:0;color:#dfe4ff;font-size:13px;line-height:1.55;display:block}
+  .codewrap .lang{position:absolute;top:8px;left:12px;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--faint)}
+  .copycode{position:absolute;top:7px;right:8px;font-size:11px;padding:4px 9px;border-radius:8px;border:1px solid var(--stroke);
+    background:rgba(255,255,255,.06);color:var(--muted);cursor:pointer;opacity:0;transition:.2s}
+  .codewrap:hover .copycode{opacity:1}
+  .copycode:hover{color:var(--text);border-color:var(--accent)}
+
+  /* thinking panel */
+  .think{margin:0 0 10px;border:1px solid var(--stroke);border-radius:12px;background:rgba(130,140,200,.06);overflow:hidden}
+  .think summary{list-style:none;cursor:pointer;padding:9px 12px;font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:8px;user-select:none}
+  .think summary::-webkit-details-marker{display:none}
+  .think summary .chev{transition:.25s;font-size:10px;color:var(--faint)}
+  .think[open] summary .chev{transform:rotate(90deg)}
+  .think .brain{filter:drop-shadow(0 0 6px rgba(139,123,255,.6))}
+  .think.live summary{background:linear-gradient(90deg,transparent,rgba(139,123,255,.14),transparent);background-size:200% 100%;animation:shimmer 1.6s linear infinite}
+  @keyframes shimmer{to{background-position:-200% 0}}
+  .think .body{padding:0 14px 12px;font-size:12.5px;color:var(--muted);line-height:1.55;white-space:pre-wrap;max-height:260px;overflow-y:auto;font-family:var(--mono)}
+  .think .tm{margin-left:auto;font-size:11px;color:var(--faint)}
+
+  .cursor{display:inline-block;width:8px;height:15px;background:var(--accent2);border-radius:2px;margin-left:2px;vertical-align:-2px;animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  /* meta / actions */
+  .meta{display:flex;align-items:center;gap:10px;margin-top:8px;padding-top:8px;border-top:1px solid var(--stroke);
+    font-size:11px;color:var(--faint);flex-wrap:wrap}
+  .chiplet{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;background:rgba(130,140,200,.12)}
+  .act{margin-left:auto;display:flex;gap:6px}
+  .act button{border:none;background:none;color:var(--faint);cursor:pointer;font-size:12px;padding:3px 7px;border-radius:7px;transition:.15s;display:flex;align-items:center;gap:4px}
+  .act button:hover{color:var(--text);background:rgba(130,140,200,.15)}
+
+  /* citations */
+  .cites{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+  .cites .h{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--faint)}
+  .cite{display:flex;gap:8px;padding:8px 10px;border:1px solid var(--stroke);border-radius:10px;background:rgba(130,140,200,.07);font-size:12.5px}
+  .cite .num{color:var(--accent2);font-weight:700}
+  .cite a{color:var(--accent2);text-decoration:none}
+
+  /* welcome */
+  .welcome{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:20px;animation:rise .5s}
+  .welcome .big{font-size:clamp(26px,5vw,40px);font-weight:800;margin:0 0 8px;
+    background:linear-gradient(120deg,#a78bff,#4ad6ff,#ff7cc0);-webkit-background-clip:text;background-clip:text;color:transparent;background-size:200%;animation:hue 8s linear infinite}
+  @keyframes hue{to{background-position:200%}}
+  .welcome p{color:var(--muted);max-width:460px;margin:0 0 26px;font-size:15px}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;max-width:640px}
+  .chip{padding:11px 16px;border-radius:14px;border:1px solid var(--stroke);background:var(--panel);backdrop-filter:blur(12px);
+    cursor:pointer;font-size:13.5px;color:var(--text);transition:.2s;text-align:left;max-width:280px}
+  .chip:hover{transform:translateY(-3px);border-color:var(--accent);box-shadow:0 10px 26px rgba(124,92,255,.28)}
+  .chip .e{margin-right:8px}
+
+  /* composer */
+  .composer{padding:10px 4px 18px}
+  .box{display:flex;align-items:flex-end;gap:10px;background:var(--panel);backdrop-filter:blur(16px);
+    border:1px solid var(--stroke);border-radius:20px;padding:10px 10px 10px 16px;box-shadow:var(--shadow);transition:border-color .2s}
+  .box:focus-within{border-color:var(--accent)}
+  textarea{flex:1;resize:none;border:none;background:none;color:var(--text);font-family:var(--font);font-size:15px;
+    line-height:1.5;max-height:180px;outline:none;padding:6px 0}
+  textarea::placeholder{color:var(--faint)}
+  .send{width:42px;height:42px;flex:none;border-radius:14px;border:none;cursor:pointer;color:#fff;font-size:18px;
+    background:var(--user);box-shadow:0 6px 18px rgba(90,90,255,.4);transition:.2s;display:grid;place-items:center}
+  .send:hover{transform:scale(1.06)}
+  .send:disabled{opacity:.4;cursor:not-allowed;transform:none;box-shadow:none}
+  .send.stop{background:linear-gradient(135deg,#ff6b7d,#ff9254)}
+  .hint{text-align:center;font-size:11px;color:var(--faint);margin-top:8px}
+  .hint kbd{font-family:var(--mono);background:rgba(130,140,200,.16);padding:1px 5px;border-radius:5px;font-size:10.5px}
+
+  /* modal */
+  .overlay{position:fixed;inset:0;background:rgba(4,5,14,.6);backdrop-filter:blur(6px);z-index:50;display:none;align-items:center;justify-content:center;padding:18px;animation:fade .2s}
+  .overlay.on{display:flex}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .modal{width:100%;max-width:480px;background:var(--panel-solid);border:1px solid var(--stroke);border-radius:20px;padding:22px;box-shadow:var(--shadow);animation:rise .3s}
+  .modal h2{margin:0 0 4px;font-size:18px}
+  .modal .desc{color:var(--muted);font-size:13px;margin:0 0 18px}
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:6px;font-weight:600}
+  .field input[type=text],.field textarea,.field select{width:100%;padding:10px 12px;border-radius:12px;border:1px solid var(--stroke);
+    background:var(--panel);color:var(--text);font-family:var(--font);font-size:13.5px;outline:none}
+  .field textarea{resize:vertical;min-height:70px;line-height:1.5}
+  .field input:focus,.field textarea:focus,.field select:focus{border-color:var(--accent)}
+  .row{display:flex;gap:10px}.row>*{flex:1}
+  .range{display:flex;align-items:center;gap:10px}
+  .range input[type=range]{flex:1;accent-color:var(--accent)}
+  .range .v{font-family:var(--mono);font-size:12px;color:var(--accent2);width:34px;text-align:right}
+  .modal .foot{display:flex;gap:10px;margin-top:8px}
+  .btn{flex:1;padding:11px;border-radius:12px;border:1px solid var(--stroke);background:var(--panel);color:var(--text);cursor:pointer;font-size:14px;font-weight:600;transition:.2s}
+  .btn:hover{border-color:var(--accent)}
+  .btn.primary{background:var(--user);border:none;color:#fff;box-shadow:0 6px 18px rgba(90,90,255,.35)}
+  .btn.primary:hover{transform:translateY(-2px)}
+
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--panel-solid);
+    border:1px solid var(--stroke);color:var(--text);padding:10px 18px;border-radius:12px;font-size:13px;box-shadow:var(--shadow);
+    opacity:0;pointer-events:none;transition:.3s;z-index:60}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  @media(max-width:640px){
+    .bubble{max-width:86%}
+    .brand .sub .ep{display:none}
+    header{padding-top:12px}
+  }
+</style>
+</head>
+<body>
+  <div class="aurora"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+
+  <div class="app">
+    <header>
+      <div class="logo"></div>
+      <div class="brand">
+        <h1>Aurora</h1>
+        <div class="sub"><span class="dot"></span><span id="statusText">OpenRouter</span> · <span class="ep" id="modelBadge">openrouter/free</span></div>
+      </div>
+      <div class="spacer"></div>
+      <button class="iconbtn" id="themeBtn" title="Toggle theme">🌙</button>
+      <button class="iconbtn" id="settingsBtn" title="Settings">⚙️</button>
+      <button class="iconbtn" id="clearBtn" title="New chat">🗑️</button>
+    </header>
+
+    <div class="stream" id="stream"></div>
+
+    <div class="composer">
+      <div class="box">
+        <textarea id="input" rows="1" placeholder="Ask anything… (any language)"></textarea>
+        <button class="send" id="sendBtn" title="Send">➤</button>
+      </div>
+      <div class="hint"><kbd>Enter</kbd> to send · <kbd>Shift</kbd>+<kbd>Enter</kbd> for newline · <kbd>Esc</kbd> to stop</div>
+    </div>
+  </div>
+
+  <!-- settings -->
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h2>⚙️ Settings</h2>
+      <p class="desc">Runs locally. Your API keys are stored only in this browser (localStorage) and sent straight to the provider you pick — never hardcoded, never to any other server.</p>
+      <div class="field">
+        <label>Provider</label>
+        <select id="provSel">
+          <option value="openrouter">🌐 OpenRouter (free models, BYOK)</option>
+          <option value="cloudflare">☁️ Cloudflare Workers AI (via your proxy Worker)</option>
+          <option value="gemini">✨ Google Gemini (BYOK)</option>
+          <option value="compat">🔌 Custom OpenAI-compatible (e.g. local Una)</option>
+        </select>
+        <div style="font-size:11.5px;color:var(--faint);margin-top:6px" id="provHint"></div>
+      </div>
+      <div class="field">
+        <label id="keyLabel">API key</label>
+        <input type="password" id="keyInput" spellcheck="false" placeholder="sk-or-v1-…" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Model</label>
+        <select id="modelSel"></select>
+        <input type="text" id="modelInput" spellcheck="false" placeholder="model id" style="margin-top:8px;display:none">
+        <div style="font-size:11.5px;color:var(--faint);margin-top:6px" id="modelHint">Free models come and go; if one 404s/429s, use <b>openrouter/free</b>.</div>
+      </div>
+      <div class="field" id="epField">
+        <label>Endpoint URL <span style="color:var(--faint);font-weight:400" id="epHint"></span></label>
+        <input type="text" id="epInput" spellcheck="false">
+      </div>
+      <div class="field">
+        <label>📚 Knowledge search (RAG) <span style="color:var(--faint);font-weight:400">— optional, answers cite aisvet.sk</span></label>
+        <label style="display:flex;gap:8px;align-items:center;font-weight:400;margin:6px 0"><input type="checkbox" id="ragOn" style="width:auto"> Ground answers in AI Search results</label>
+        <input type="text" id="ragUrl" spellcheck="false" placeholder="https://your-worker.workers.dev/search (proxy Worker URL)">
+      </div>
+      <div class="field">
+        <label>Personality / system prompt</label>
+        <textarea id="sysInput" placeholder="e.g. You are a witty, concise assistant."></textarea>
+      </div>
+      <div class="field">
+        <label>Preset personalities</label>
+        <select id="presetSel">
+          <option value="">— pick one —</option>
+          <option value="You are Aurora, a friendly, clear and concise AI assistant. Use light formatting and the occasional tasteful emoji.">✨ Friendly (default)</option>
+          <option value="You are a laconic expert. Answer with maximum precision and minimum words. No fluff.">🎯 Laconic expert</option>
+          <option value="You always reply like a witty pirate captain, while still being genuinely helpful. Arr!">🏴‍☠️ Pirate</option>
+          <option value="You are an enthusiastic teacher. Explain things step by step with simple analogies.">🧑‍🏫 Teacher</option>
+          <option value="You are a creative brainstorming partner. Offer bold, imaginative ideas and lists.">🎨 Brainstormer</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Temperature <span style="color:var(--faint);font-weight:400">— creativity</span></label>
+        <div class="range"><input type="range" id="tempInput" min="0" max="1.5" step="0.1" value="0.7"><span class="v" id="tempVal">0.7</span></div>
+      </div>
+      <div class="foot">
+        <button class="btn" id="resetBtn">Reset</button>
+        <button class="btn primary" id="saveBtn">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   Aurora — single-file streaming chat for a Cloudflare AI Search
+   (OpenAI-compatible) endpoint. No external libraries.
+   ============================================================ */
+
+// The Cloudflare endpoint blocks direct browser calls (no CORS header), so by
+// Talks DIRECTLY to OpenRouter (OpenAI-compatible). Pure static file: works on
+// GitHub Pages or from disk, no server. Your API key lives only in this browser
+// (localStorage via Settings) — it is NEVER hardcoded in the file.
+// "openrouter/free" auto-routes to whatever free model is available (reliable);
+// you can type a specific model in Settings.
+const DEFAULTS = {
+  provider: "openrouter",           // openrouter | cloudflare | gemini | compat
+  endpoint: "https://openrouter.ai/api/v1/chat/completions",
+  apiKey:   "",                     // legacy (openrouter) — kept for back-compat
+  model:    "openrouter/free",
+  system:   "You are Aurora, a friendly, clear and concise AI assistant. Use light formatting and the occasional tasteful emoji.",
+  temp: 0.7,
+  theme: "dark",
+  // per-provider state (keys live ONLY in this browser's localStorage)
+  keys: {},                         // {openrouter, cloudflare, gemini, compat}
+  models: {},                       // remembered model per provider
+  eps: {},                          // endpoint per provider (cloudflare proxy / compat)
+  ragOn: false,
+  ragUrl: ""                        // proxy Worker /search URL (CF AI Search over aisvet.sk)
+};
+
+/* Provider registry — one OpenAI-compatible SSE path serves openrouter/cloudflare/compat;
+   gemini has its own request + stream shape. Cloudflare Workers AI has NO CORS, so it is
+   reached through the user's own tiny proxy Worker (see cf-proxy-worker.js in the repo). */
+const PROVIDERS = {
+  openrouter: {
+    label:"OpenRouter", keyLabel:"OpenRouter API key — sk-or-…", keyPh:"sk-or-v1-…",
+    ep:"https://openrouter.ai/api/v1/chat/completions", epLock:true,
+    hint:"Free tier, BYOK. Get a key at openrouter.ai/keys.",
+    models:[["openrouter/free","🎲 openrouter/free (auto, reliable)"],
+            ["nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free","🧠 Nemotron Omni 30B (reasoning)"],
+            ["cohere/north-mini-code:free","⌨️ Cohere North Mini Code"]]
+  },
+  cloudflare: {
+    label:"Cloudflare", keyLabel:"Proxy key (optional — only if your Worker requires one)", keyPh:"(leave empty if Worker holds the CF token)",
+    ep:"", epLock:false, epHint:"— your proxy Worker /chat URL",
+    hint:"Deploy cf-proxy-worker.js (free, ~2 min) — it adds CORS and keeps your CF token server-side. Daily free tier.",
+    models:[["@cf/meta/llama-4-scout-17b-16e-instruct","⚡ Llama 4 Scout 17B (fast, no-think)"],
+            ["@cf/moonshotai/kimi-k2.6","💭 Kimi K2.6 (thinking)"],
+            ["@cf/moonshotai/kimi-k2.7-code","⌨️ Kimi K2.7 Code (thinking)"],
+            ["@cf/qwen/qwen3-30b-a3b-fp8","🧠 Qwen3 30B (thinking)"],
+            ["@cf/google/gemma-4-26b-a4b-it","🌸 Gemma 4 26B"],
+            ["@cf/nvidia/nemotron-3-120b-a12b","🐘 Nemotron 3 120B"],
+            ["@cf/zai-org/glm-4.7-flash","🌊 GLM 4.7 Flash"],
+            ["@cf/meta/llama-3.3-70b-instruct-fp8-fast","🦙 Llama 3.3 70B fast"]]
+  },
+  gemini: {
+    label:"Gemini", keyLabel:"Google AI API key — AIza…", keyPh:"AIza…",
+    ep:"https://generativelanguage.googleapis.com/v1beta", epLock:true,
+    hint:"Generous free tier, BYOK, direct browser calls (CORS ok). Get a key at aistudio.google.com.",
+    models:[["gemini-2.5-flash","⚡ Gemini 2.5 Flash"],
+            ["gemini-2.5-flash-lite","🪶 Gemini 2.5 Flash Lite (big quota)"],
+            ["gemini-2.5-pro","🧠 Gemini 2.5 Pro"]]
+  },
+  compat: {
+    label:"Custom", keyLabel:"Bearer token (if the endpoint needs one)", keyPh:"optional",
+    ep:"http://127.0.0.1:3000/v1/chat/completions", epLock:false, epHint:"— any OpenAI-compatible /chat/completions",
+    hint:"Point Aurora at any OpenAI-compatible server — e.g. a local Factorium/Una endpoint or llama.cpp.",
+    models:[["local","🏠 (server default model)"]]
+  }
+};
+
+const store = {
+  get cfg(){ try{return JSON.parse(localStorage.getItem("aurora.cfg"))||{}}catch{return {}} },
+  set cfg(v){ localStorage.setItem("aurora.cfg", JSON.stringify(v)); },
+  get msgs(){ try{return JSON.parse(localStorage.getItem("aurora.msgs"))||[]}catch{return []} },
+  set msgs(v){ localStorage.setItem("aurora.msgs", JSON.stringify(v)); }
+};
+
+let cfg = Object.assign({}, DEFAULTS, store.cfg);
+let messages = store.msgs;          // [{role, content, reasoning, usage, thinkMs, cites}]
+let controller = null;              // AbortController for in-flight request
+let generating = false;
+
+/* ---------- element refs ---------- */
+const $ = s => document.querySelector(s);
+const streamEl = $("#stream"), inputEl = $("#input"), sendBtn = $("#sendBtn");
+const overlay = $("#overlay"), toastEl = $("#toast");
+
+/* ============================================================ theme */
+function applyTheme(){
+  document.documentElement.dataset.theme = cfg.theme;
+  $("#themeBtn").textContent = cfg.theme === "dark" ? "🌙" : "☀️";
+}
+$("#themeBtn").onclick = () => { cfg.theme = cfg.theme==="dark"?"light":"dark"; persistCfg(); applyTheme(); };
+
+/* ============================================================ markdown */
+const esc = s => s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+function inlineFmt(t){
+  const ic=[];
+  t = t.replace(/`([^`]+)`/g,(m,c)=>{ic.push(c);return "\u0001IC"+(ic.length-1)+"\u0001";});
+  t = esc(t);
+  t = t.replace(/\*\*([^*]+)\*\*/g,"<strong>$1</strong>")
+       .replace(/__([^_]+)__/g,"<strong>$1</strong>")
+       .replace(/\*([^*\n]+)\*/g,"<em>$1</em>")
+       .replace(/(^|[^\w])_([^_\n]+)_(?!\w)/g,"$1<em>$2</em>")
+       .replace(/~~([^~]+)~~/g,"<del>$1</del>");
+  t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  t = t.replace(/\u0001IC(\d+)\u0001/g,(m,i)=>"<code>"+esc(ic[+i])+"</code>");
+  return t;
+}
+function codeBlock(lang, code){
+  return '<div class="codewrap">'+(lang?'<span class="lang">'+esc(lang)+'</span>':'')+
+    '<button class="copycode" data-code="'+encodeURIComponent(code)+'">copy</button>'+
+    '<pre><code>'+esc(code)+'</code></pre></div>';
+}
+function md(src){
+  if(!src) return "";
+  const blocks=[];
+  src = src.replace(/```(\w*)\n?([\s\S]*?)```/g,(m,l,c)=>{blocks.push([l,c.replace(/\n$/,"")]);return "\u0002CB"+(blocks.length-1)+"\u0002";});
+  const lines = src.split("\n");
+  let html="", list=null, para=[];
+  const flush=()=>{ if(para.length){html+="<p>"+inlineFmt(para.join(" "))+"</p>";para=[];} };
+  const close=()=>{ if(list){html+="</"+list+">";list=null;} };
+  for(let line of lines){
+    let m;
+    if(/^\s*$/.test(line)){ flush(); close(); continue; }
+    if(m=line.match(/^\u0002CB(\d+)\u0002$/)){ flush(); close(); const b=blocks[+m[1]]; html+=codeBlock(b[0],b[1]); continue; }
+    if(m=line.match(/^(#{1,6})\s+(.*)$/)){ flush(); close(); const l=m[1].length; html+="<h"+l+">"+inlineFmt(m[2])+"</h"+l+">"; continue; }
+    if(/^\s*(---|\*\*\*|___)\s*$/.test(line)){ flush(); close(); html+="<hr>"; continue; }
+    if(m=line.match(/^\s*>\s?(.*)$/)){ flush(); close(); html+="<blockquote>"+inlineFmt(m[1])+"</blockquote>"; continue; }
+    if(/^\s*[-*+]\s+/.test(line)){ flush(); if(list!=="ul"){close();html+="<ul>";list="ul";} html+="<li>"+inlineFmt(line.replace(/^\s*[-*+]\s+/,""))+"</li>"; continue; }
+    if(/^\s*\d+\.\s+/.test(line)){ flush(); if(list!=="ol"){close();html+="<ol>";list="ol";} html+="<li>"+inlineFmt(line.replace(/^\s*\d+\.\s+/,""))+"</li>"; continue; }
+    close(); para.push(line);
+  }
+  flush(); close();
+  return html.replace(/\u0002CB(\d+)\u0002/g,(m,i)=>{const b=blocks[+i];return codeBlock(b[0],b[1]);});
+}
+
+/* ============================================================ rendering */
+function avatar(role){ return role==="user" ? "🧑" : "✦"; }
+
+function scrollDown(force){
+  const near = streamEl.scrollHeight - streamEl.scrollTop - streamEl.clientHeight < 140;
+  if(force || near) streamEl.scrollTop = streamEl.scrollHeight;
+}
+
+function welcome(){
+  const chips = [
+    ["💡","Explain quantum entanglement like I'm five"],
+    ["✍️","Write a haiku about the northern lights"],
+    ["🧑‍💻","Show me a Python function to reverse a linked list"],
+    ["🌍","Povedz mi zaujímavý fakt o vesmíre"]
+  ];
+  const keyNote = (!cfg.apiKey)
+    ? '<div style="margin-top:22px;font-size:13px;color:var(--warn);max-width:560px;line-height:1.7">'+
+      '🔑 First: open <b>⚙️ Settings</b> and paste your <b>OpenRouter</b> key (<code style="background:rgba(130,140,200,.16);padding:1px 6px;border-radius:6px">sk-or-…</code>). '+
+      'It stays only in this browser. Then pick a model (<b>openrouter/free</b> works great).</div>'
+    : '';
+  streamEl.innerHTML =
+    '<div class="welcome"><div class="big">Hello there ✦</div>'+
+    '<p>I\'m Aurora, a streaming AI chat over <b>OpenRouter</b> free models. I\'ll even show you my <em>thinking</em>. Ask me anything, in any language.</p>'+
+    '<div class="chips">'+chips.map(c=>'<div class="chip" data-q="'+esc(c[1])+'"><span class="e">'+c[0]+'</span>'+esc(c[1])+'</div>').join("")+'</div>'+
+    keyNote+'</div>';
+  streamEl.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ inputEl.value=c.dataset.q; send(); });
+}
+
+function renderAll(){
+  if(!messages.length){ welcome(); return; }
+  streamEl.innerHTML="";
+  messages.forEach(m=>streamEl.appendChild(buildMsg(m)));
+  scrollDown(true);
+  bindCopy();
+}
+
+function buildMsg(m){
+  const wrap = document.createElement("div");
+  wrap.className = "msg "+(m.role==="user"?"user":"ai");
+  const av = document.createElement("div"); av.className="av"; av.textContent=avatar(m.role);
+  const bubble = document.createElement("div"); bubble.className="bubble";
+
+  if(m.role==="assistant"){
+    if(m.reasoning && m.reasoning.trim()){
+      bubble.appendChild(thinkPanel(m.reasoning, m.thinkMs, false));
+    }
+    const body = document.createElement("div"); body.className="body";
+    body.innerHTML = md(m.content||"");
+    bubble.appendChild(body);
+    if(m.cites && m.cites.length) bubble.appendChild(citePanel(m.cites));
+    bubble.appendChild(metaBar(m));
+  } else {
+    bubble.textContent = m.content;
+  }
+  wrap.appendChild(av); wrap.appendChild(bubble);
+  return wrap;
+}
+
+function thinkPanel(text, ms, live){
+  const d = document.createElement("details");
+  d.className = "think"+(live?" live":"");
+  d.open = live;
+  d.innerHTML =
+    '<summary><span class="brain">💭</span> Thinking<span class="chev">▶</span>'+
+    '<span class="tm">'+(ms?(( ms/1000).toFixed(1)+"s"):"")+'</span></summary>'+
+    '<div class="body"></div>';
+  d.querySelector(".body").textContent = text;
+  return d;
+}
+
+function citePanel(cites){
+  const box=document.createElement("div"); box.className="cites";
+  let h='<div class="h">Sources</div>';
+  const items = cites.map((c,i)=>{
+    const title = c.filename||c.title||c.file_id||c.id||("Source "+(i+1));
+    const url = c.url||c.source||(c.attributes&&(c.attributes.url||c.attributes.source));
+    let snippet = "";
+    if(Array.isArray(c.content)) snippet = c.content.map(x=>x&&x.text?x.text:"").join(" ");
+    else if(typeof c.content==="string") snippet=c.content; else if(c.text) snippet=c.text;
+    snippet = (snippet||"").slice(0,160);
+    const label = url?'<a href="'+esc(url)+'" target="_blank" rel="noopener">'+esc(title)+'</a>':esc(title);
+    return '<div class="cite"><span class="num">'+(i+1)+'</span><div><div><strong>'+label+'</strong></div>'+
+      (snippet?'<div style="color:var(--faint);margin-top:2px">'+esc(snippet)+'…</div>':'')+'</div></div>';
+  }).join("");
+  box.innerHTML=h+items;
+  return box;
+}
+
+function metaBar(m){
+  const bar=document.createElement("div"); bar.className="meta";
+  let chips="";
+  if(m.usage&&m.usage.total_tokens) chips+='<span class="chiplet">🔢 '+m.usage.total_tokens+' tok</span>';
+  if(m.thinkMs) chips+='<span class="chiplet">💭 '+(m.thinkMs/1000).toFixed(1)+'s thought</span>';
+  bar.innerHTML = chips +
+    '<span class="act">'+
+      '<button data-act="copy" title="Copy">📋 Copy</button>'+
+      '<button data-act="regen" title="Regenerate">🔄 Retry</button>'+
+    '</span>';
+  bar.querySelector('[data-act=copy]').onclick=()=>{ navigator.clipboard.writeText(m.content); toast("Copied ✓"); };
+  bar.querySelector('[data-act=regen]').onclick=()=> regenerate(m);
+  return bar;
+}
+
+function bindCopy(){
+  streamEl.querySelectorAll(".copycode").forEach(b=>{
+    b.onclick=()=>{ navigator.clipboard.writeText(decodeURIComponent(b.dataset.code)); b.textContent="copied ✓"; setTimeout(()=>b.textContent="copy",1200); };
+  });
+}
+
+/* ============================================================ send / stream */
+function setGenerating(on){
+  generating = on;
+  sendBtn.classList.toggle("stop", on);
+  sendBtn.textContent = on ? "■" : "➤";
+  sendBtn.title = on ? "Stop" : "Send";
+  $("#statusText").textContent = on ? "thinking…" : "OpenRouter";
+}
+
+async function send(){
+  const text = inputEl.value.trim();
+  if(generating){ stop(); return; }
+  if(!text) return;
+  inputEl.value=""; autoGrow();
+
+  messages.push({role:"user", content:text});
+  store.msgs = messages;
+  if(streamEl.querySelector(".welcome")) streamEl.innerHTML="";
+  streamEl.appendChild(buildMsg({role:"user",content:text}));
+  scrollDown(true);
+
+  await runCompletion();
+}
+
+async function regenerate(target){
+  // drop the target assistant msg (and anything after) then re-run
+  const idx = messages.indexOf(target);
+  if(idx<0) return;
+  messages = messages.slice(0, idx);
+  store.msgs = messages;
+  renderAll();
+  await runCompletion();
+}
+
+async function runCompletion(){
+  setGenerating(true);
+  controller = new AbortController();
+
+  // build assistant placeholder in DOM
+  const wrap=document.createElement("div"); wrap.className="msg ai";
+  const av=document.createElement("div"); av.className="av"; av.textContent="✦";
+  const bubble=document.createElement("div"); bubble.className="bubble";
+  const think=thinkPanel("", 0, true); think.style.display="none";
+  const body=document.createElement("div"); body.className="body";
+  body.innerHTML='<span class="cursor"></span>';
+  bubble.appendChild(think); bubble.appendChild(body);
+  wrap.appendChild(av); wrap.appendChild(bubble);
+  streamEl.appendChild(wrap); scrollDown(true);
+
+  let answer="", reasoning="", usage=null, cites=[];
+  const t0=performance.now(); let thinkStart=0, thinkMs=0, contentStarted=false;
+
+  const paint=()=>{
+    if(reasoning && think.style.display==="none"){ think.style.display=""; }
+    if(reasoning) think.querySelector(".body").textContent=reasoning;
+    body.innerHTML = answer ? md(answer)+(generating?'<span class="cursor"></span>':'') : '<span class="cursor"></span>';
+    bindCopy(); scrollDown();
+  };
+
+  try{
+    const prov = cfg.provider || "openrouter";
+    const P = PROVIDERS[prov] || PROVIDERS.openrouter;
+    const key = (cfg.keys && cfg.keys[prov]) || (prov==="openrouter" ? cfg.apiKey : "") || "";
+    if((prov==="openrouter"||prov==="gemini") && !key) throw new Error("NO_KEY");
+
+    // ── RAG prefetch (optional): ground the answer in AI Search chunks ──
+    let ragBlock="";
+    if(cfg.ragOn && cfg.ragUrl){
+      try{
+        const lastUser=[...messages].reverse().find(m=>m.role==="user");
+        const rr=await fetch(cfg.ragUrl,{method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({messages:[{role:"user",content:lastUser?lastUser.content:""}]}),signal:controller.signal});
+        if(rr.ok){
+          const rj=await rr.json();
+          const chunks=(rj.result&&rj.result.chunks)||rj.chunks||[];
+          cites=chunks.slice(0,5).map(c=>({title:(c.item&&c.item.key||"").replace(/^https?:\/\//,""),url:c.item&&c.item.key,text:String(c.text||"").slice(0,160)}));
+          ragBlock=chunks.slice(0,5).map((c,i)=>"["+(i+1)+"] "+((c.item&&c.item.key)||"")+"\n"+String(c.text||"").slice(0,1200)).join("\n\n");
+        }
+      }catch(e){/* RAG is best-effort — the chat must not die on it */}
+    }
+    const sysText=(cfg.system||"")+(ragBlock
+      ? "\n\nUse the following retrieved sources to ground your answer. Cite them as [1], [2]… where used; if they don't cover the question, say so.\n\n"+ragBlock
+      : "");
+
+    // ── Per-provider request ──
+    let url, headers={"Content-Type":"application/json"}, body;
+    if(prov==="gemini"){
+      const model=cfg.model||"gemini-2.5-flash";
+      url=P.ep+"/models/"+encodeURIComponent(model)+":streamGenerateContent?alt=sse";
+      headers["x-goog-api-key"]=key;
+      body={
+        contents: messages.map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]})),
+        generationConfig:{ temperature: cfg.temp }
+      };
+      if(sysText.trim()) body.systemInstruction={parts:[{text:sysText.trim()}]};
+    }else{
+      url = prov==="openrouter" ? P.ep
+          : ((cfg.eps&&cfg.eps[prov]) || P.ep);
+      if(!url) throw new Error("NO_PROXY");
+      if(key) headers["Authorization"]="Bearer "+key;
+      headers["X-Title"]="Aurora";
+      body={
+        model: cfg.model || "openrouter/free",
+        stream:true,
+        temperature: cfg.temp,
+        ...(prov==="openrouter"?{reasoning:{enabled:true}}:{}),
+        ...(prov==="cloudflare"?{max_tokens:2048}:{}),
+        messages:[
+          ...(sysText.trim()?[{role:"system",content:sysText.trim()}]:[]),
+          ...messages.map(m=>({role:m.role,content:m.content}))
+        ]
+      };
+    }
+
+    const res = await fetch(url,{
+      method:"POST",
+      headers,
+      body:JSON.stringify(body),
+      signal:controller.signal
+    });
+    if(!res.ok){
+      const body=(await res.text()).slice(0,300);
+      throw new Error("HTTP "+res.status+" — "+body);
+    }
+
+    const reader=res.body.getReader(); const dec=new TextDecoder();
+    let buf="", evName=null, dataLines=[];
+
+    const dispatch=()=>{
+      if(!dataLines.length){ evName=null; return; }
+      const data=dataLines.join("\n"); dataLines=[]; const ev=evName; evName=null;
+      if(data==="[DONE]") return;
+      if(ev==="chunks"){ try{const a=JSON.parse(data); if(Array.isArray(a)&&a.length){cites=a;}}catch{} return; }
+      try{
+        const o=JSON.parse(data);
+        const d=o.choices&&o.choices[0]&&o.choices[0].delta;
+        if(d){
+          const r=d.reasoning||d.reasoning_content;
+          if(r){ if(!thinkStart)thinkStart=performance.now(); reasoning+=r; }
+          if(d.content){
+            if(!contentStarted){ contentStarted=true; if(thinkStart){thinkMs=performance.now()-thinkStart; think.classList.remove("live"); think.open=false; think.querySelector(".tm").textContent=(thinkMs/1000).toFixed(1)+"s";} }
+            answer+=d.content;
+          }
+        }
+        if(o.usage) usage=o.usage;
+        // Gemini streamGenerateContent shape: candidates[0].content.parts[].text
+        const g=o.candidates&&o.candidates[0];
+        if(g&&g.content&&Array.isArray(g.content.parts)){
+          for(const p of g.content.parts){
+            if(!p||typeof p.text!=="string") continue;
+            if(p.thought){ if(!thinkStart)thinkStart=performance.now(); reasoning+=p.text; }
+            else{
+              if(!contentStarted){ contentStarted=true; if(thinkStart){thinkMs=performance.now()-thinkStart; think.classList.remove("live"); think.open=false; think.querySelector(".tm").textContent=(thinkMs/1000).toFixed(1)+"s";} }
+              answer+=p.text;
+            }
+          }
+        }
+        if(o.usageMetadata) usage={prompt_tokens:o.usageMetadata.promptTokenCount||0,completion_tokens:o.usageMetadata.candidatesTokenCount||0,total_tokens:o.usageMetadata.totalTokenCount||0};
+      }catch{}
+      paint();
+    };
+
+    while(true){
+      const {value,done}=await reader.read();
+      if(done) break;
+      buf+=dec.decode(value,{stream:true});
+      let nl;
+      while((nl=buf.indexOf("\n"))!==-1){
+        let line=buf.slice(0,nl); buf=buf.slice(nl+1);
+        if(line.endsWith("\r")) line=line.slice(0,-1);
+        if(line===""){ dispatch(); continue; }
+        if(line.startsWith(":")) continue;
+        const ci=line.indexOf(":");
+        const field=ci===-1?line:line.slice(0,ci);
+        let val=ci===-1?"":line.slice(ci+1); if(val.startsWith(" "))val=val.slice(1);
+        if(field==="event") evName=val;
+        else if(field==="data") dataLines.push(val);
+      }
+    }
+    dispatch();
+
+    if(!answer && !reasoning) throw new Error("Empty response from model.");
+
+    const msg={role:"assistant",content:answer,reasoning,usage,thinkMs,cites};
+    messages.push(msg); store.msgs=messages;
+    // finalize DOM
+    wrap.replaceWith(buildMsg(msg)); bindCopy();
+
+  }catch(err){
+    if(err.name==="AbortError"){
+      if(answer||reasoning){ const msg={role:"assistant",content:answer||"_(stopped)_",reasoning,usage,thinkMs,cites}; messages.push(msg); store.msgs=messages; wrap.replaceWith(buildMsg(msg)); }
+      else wrap.remove();
+    }else{
+      const m=err.message||"";
+      let help;
+      if(m==="NO_KEY"){
+        help='🔑 No API key set for this provider. Open <b>⚙️ Settings</b> and paste your key. '+
+             'It stays in this browser only.';
+        toast("Add your API key");
+      }else if(m==="NO_PROXY"){
+        help='☁️ Cloudflare needs your proxy Worker URL (it has no CORS for browsers). '+
+             'Deploy <code>cf-proxy-worker.js</code> from the repo (free, ~2 min) and paste its '+
+             '<code>/chat</code> URL as the Endpoint in ⚙️ Settings.';
+        toast("Set your Worker URL");
+      }else if(/HTTP 401/.test(m)){
+        help='🔑 Invalid API key (401). Check the key for the selected provider in ⚙️ Settings.';
+        toast("Invalid key");
+      }else if(/HTTP 429/.test(m)){
+        help='⏳ Rate-limited (429). Free models are shared — wait a few seconds and retry, '+
+             'or set model to <code>openrouter/free</code> in ⚙️ Settings for auto-routing.';
+        toast("Rate-limited, retry");
+      }else if(/HTTP 404/.test(m)){
+        help='🚫 That model isn\u2019t free/available right now (404). Switch model to '+
+             '<code>openrouter/free</code> in ⚙️ Settings.';
+        toast("Model unavailable");
+      }else if(/failed to fetch|networkerror|load failed/i.test(m)){
+        help='⚠️ Couldn\u2019t reach OpenRouter (network/CORS). Check your connection; '+
+             'if hosted, make sure the page is served over https.';
+        toast("Network error");
+      }else{
+        help='⚠️ '+esc(m);
+        toast("Request failed");
+      }
+      body.innerHTML='<div style="color:var(--err);line-height:1.7">'+help+'</div>';
+      think.style.display="none";
+    }
+  }finally{
+    setGenerating(false); controller=null; scrollDown();
+  }
+}
+
+function stop(){ if(controller) controller.abort(); }
+
+/* ============================================================ misc UI */
+function autoGrow(){ inputEl.style.height="auto"; inputEl.style.height=Math.min(inputEl.scrollHeight,180)+"px"; }
+inputEl.addEventListener("input", autoGrow);
+inputEl.addEventListener("keydown", e=>{
+  if(e.key==="Enter" && !e.shiftKey){ e.preventDefault(); send(); }
+  if(e.key==="Escape" && generating){ stop(); }
+});
+sendBtn.onclick=send;
+
+$("#clearBtn").onclick=()=>{
+  if(messages.length && !confirm("Start a new chat? Current conversation will be cleared.")) return;
+  stop(); messages=[]; store.msgs=[]; welcome();
+};
+
+function toast(msg){ toastEl.textContent=msg; toastEl.classList.add("on"); clearTimeout(toast._t); toast._t=setTimeout(()=>toastEl.classList.remove("on"),1600); }
+
+/* ---------- settings modal (multi-provider) ---------- */
+function fillProviderUI(prov, keepModel){
+  const P=PROVIDERS[prov]||PROVIDERS.openrouter;
+  $("#provHint").textContent=P.hint||"";
+  $("#keyLabel").textContent=P.keyLabel; $("#keyInput").placeholder=P.keyPh||"";
+  $("#keyInput").value=(cfg.keys&&cfg.keys[prov])||(prov==="openrouter"?cfg.apiKey||"":"");
+  // model options
+  const sel=$("#modelSel"); sel.innerHTML="";
+  for(const [v,l] of P.models){ const o=document.createElement("option"); o.value=v; o.textContent=l; sel.appendChild(o); }
+  const oc=document.createElement("option"); oc.value="__custom__"; oc.textContent="✏️ Custom…"; sel.appendChild(oc);
+  const remembered=keepModel||(cfg.models&&cfg.models[prov])||P.models[0][0];
+  if([...sel.options].some(o=>o.value===remembered)){ sel.value=remembered; $("#modelInput").style.display="none"; }
+  else { sel.value="__custom__"; $("#modelInput").style.display=""; $("#modelInput").value=remembered; }
+  // endpoint
+  const epLocked=!!P.epLock;
+  $("#epField").style.display = epLocked ? "none" : "";
+  $("#epHint").textContent=P.epHint||"";
+  $("#epInput").value=(cfg.eps&&cfg.eps[prov])||P.ep||"";
+}
+function openSettings(){
+  const prov=cfg.provider||"openrouter";
+  $("#provSel").value=prov;
+  fillProviderUI(prov, cfg.model);
+  $("#sysInput").value=cfg.system;
+  $("#tempInput").value=cfg.temp; $("#tempVal").textContent=cfg.temp;
+  $("#presetSel").value="";
+  $("#ragOn").checked=!!cfg.ragOn; $("#ragUrl").value=cfg.ragUrl||"";
+  overlay.classList.add("on");
+}
+$("#settingsBtn").onclick=openSettings;
+overlay.onclick=e=>{ if(e.target===overlay) overlay.classList.remove("on"); };
+$("#presetSel").onchange=e=>{ if(e.target.value) $("#sysInput").value=e.target.value; };
+$("#provSel").onchange=e=>fillProviderUI(e.target.value);
+$("#modelSel").onchange=e=>{ $("#modelInput").style.display = e.target.value==="__custom__" ? "" : "none"; };
+$("#tempInput").oninput=e=>$("#tempVal").textContent=e.target.value;
+$("#saveBtn").onclick=()=>{
+  const prov=$("#provSel").value;
+  cfg.provider=prov;
+  cfg.keys=cfg.keys||{}; cfg.models=cfg.models||{}; cfg.eps=cfg.eps||{};
+  cfg.keys[prov]=$("#keyInput").value.trim();
+  if(prov==="openrouter") cfg.apiKey=cfg.keys[prov]; // back-compat
+  const sel=$("#modelSel").value;
+  cfg.model=(sel==="__custom__"?$("#modelInput").value.trim():sel)||PROVIDERS[prov].models[0][0];
+  cfg.models[prov]=cfg.model;
+  if(!PROVIDERS[prov].epLock) cfg.eps[prov]=$("#epInput").value.trim();
+  cfg.system=$("#sysInput").value.trim();
+  cfg.temp=parseFloat($("#tempInput").value);
+  cfg.ragOn=$("#ragOn").checked; cfg.ragUrl=$("#ragUrl").value.trim();
+  persistCfg(); overlay.classList.remove("on"); toast("Settings saved ✓");
+};
+$("#resetBtn").onclick=()=>{ cfg=Object.assign({},DEFAULTS,{theme:cfg.theme}); persistCfg(); openSettings(); applyTheme(); toast("Reset to defaults"); };
+function persistCfg(){ store.cfg=cfg; }
+
+/* keep the status badge in sync: provider · model */
+function syncBadge(){
+  const b=$("#modelBadge"); if(b) b.textContent=(cfg.model||"openrouter/free").replace(/:free$/,"");
+  const s=$("#statusText"); if(s) s.textContent=(PROVIDERS[cfg.provider||"openrouter"]||PROVIDERS.openrouter).label+(cfg.ragOn?" +RAG":"");
+}
+const _persist=persistCfg; persistCfg=function(){ _persist(); syncBadge(); };
+
+/* ============================================================ boot */
+applyTheme();
+syncBadge();
+renderAll();
+autoGrow();
+inputEl.focus();
+</script>
+</body>
+</html>
