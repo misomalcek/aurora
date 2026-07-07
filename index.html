@@ -639,7 +639,7 @@ async function runCompletion(){
           : ((cfg.eps&&cfg.eps[prov]) || P.ep);
       if(!url) throw new Error("NO_PROXY");
       if(key) headers["Authorization"]="Bearer "+key;
-      headers["X-Title"]="Aurora";
+      if(prov==="openrouter") headers["X-Title"]="Aurora"; // extra header breaks stricter CORS proxies
       body={
         model: cfg.model || "openrouter/free",
         stream:true,

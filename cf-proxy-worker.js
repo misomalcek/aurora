@@ -31,7 +31,7 @@ export default {
     const cors = {
       "Access-Control-Allow-Origin": env.ALLOW_ORIGIN || "*",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "authorization, content-type",
+      "Access-Control-Allow-Headers": "authorization, content-type, x-title",
     };
     if (req.method === "OPTIONS") return new Response(null, { headers: cors });
     if (req.method !== "POST") return new Response("POST only", { status: 405, headers: cors });
