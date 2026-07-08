@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8"><title>Aurora key test</title>
+<body style="font:14px monospace;background:#111;color:#eee;padding:30px;max-width:640px">
+<h3>OpenRouter key test — 20 lines, no app, no config, just the truth</h3>
+<input id="k" type="password" placeholder="sk-or-v1-…" style="width:70%;padding:8px">
+<button onclick="go()" style="padding:8px 16px">Test</button>
+<pre id="o" style="white-space:pre-wrap;color:#8f8"></pre>
+<script>
+async function go(){
+  const key=document.getElementById('k').value.trim();
+  const o=document.getElementById('o');
+  o.textContent='sending… (key '+key.slice(0,12)+'…, '+key.length+' chars)';
+  try{
+    const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      body:JSON.stringify({model:'openrouter/free',messages:[{role:'user',content:'Reply with one word: PONG'}]})
+    });
+    const t=await r.text();
+    o.textContent='HTTP '+r.status+'\n'+t.slice(0,600);
+  }catch(e){ o.textContent='FETCH ERROR: '+e; }
+}
+</script>

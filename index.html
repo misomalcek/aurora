@@ -592,6 +592,7 @@ async function runCompletion(){
   streamEl.appendChild(wrap); scrollDown(true);
 
   let answer="", reasoning="", usage=null, cites=[];
+  let usedKeyInfo="(none)"; // masked identity of the key actually sent — 401 debugging
   const t0=performance.now(); let thinkStart=0, thinkMs=0, contentStarted=false;
 
   const paint=()=>{
@@ -606,6 +607,7 @@ async function runCompletion(){
     const P = PROVIDERS[prov] || PROVIDERS.openrouter;
     const key = (cfg.keys && cfg.keys[prov]) || (prov==="openrouter" ? cfg.apiKey : "") || "";
     if((prov==="openrouter"||prov==="gemini") && !key) throw new Error("NO_KEY");
+    usedKeyInfo = key ? key.slice(0,12)+"… ("+key.length+" chars)" : "(none)";
 
     // ── RAG prefetch (optional): ground the answer in AI Search chunks ──
     let ragBlock="";
@@ -749,7 +751,9 @@ async function runCompletion(){
              '<code>/chat</code> URL as the Endpoint in ⚙️ Settings.';
         toast("Set your Worker URL");
       }else if(/HTTP 401/.test(m)){
-        help='🔑 Invalid API key (401). Check the key for the selected provider in ⚙️ Settings.';
+        help='🔑 Invalid API key (401). The app sent: <code>'+esc(usedKeyInfo)+'</code> — '+
+             'if that prefix/length does not match the key you pasted, your Save did not stick: '+
+             'open ⚙️ Settings, re-paste, Save, and watch for the "Settings saved ✓" toast.';
         toast("Invalid key");
       }else if(/HTTP 429/.test(m)){
         help='⏳ Rate-limited (429). Free models are shared — wait a few seconds and retry, '+
