@@ -370,7 +370,10 @@ const store = {
 };
 
 let cfg = Object.assign({}, DEFAULTS, store.cfg);
-let messages = store.msgs;          // [{role, content, reasoning, usage, thinkMs, cites}]
+// Migration guard: stopped/errored turns from older builds could persist
+// empty-content messages that providers reject (Cohere 400) — purge once here.
+let messages = store.msgs.filter(m=>m&&m.content&&String(m.content).trim());
+if(messages.length!==store.msgs.length) store.msgs=messages;
 let controller = null;              // AbortController for in-flight request
 let generating = false;
 
@@ -631,7 +634,7 @@ async function runCompletion(){
       headers["x-goog-api-key"]=key;
       body={
         contents: messages.filter(m=>m.content&&m.content.trim()).map(m=>({role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]})),
-        generationConfig:{ temperature: cfg.temp }
+        generationConfig:{ temperature: cfg.temp, maxOutputTokens: 8192 }
       };
       if(sysText.trim()) body.systemInstruction={parts:[{text:sysText.trim()}]};
     }else{
